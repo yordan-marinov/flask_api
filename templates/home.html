@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Home</title>
+</head>
+<body>
+<h2>Currency converter</h2>
+<form action="http://localhost:5000" method="post">
+    <p>Currency</p>
+    <p><label>
+        <input type="text" name="currency" required/>
+    </label></p>
+    <p>Convert to</p>
+    <p><label>
+        <input type="text" name="convert_currency" required/>
+    </label></p>
+    <p>Amount</p>
+    <p><label>
+        <input type="number" name="amount" min="1" required/>
+    </label></p>
+    <p><input type="submit" value="calculate"/></p>
+</form>
+<p>Total: {{ value }}</p>
+</body>
+</html>
