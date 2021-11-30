@@ -1,69 +1,25 @@
 import json
-from flask_caching import Cache
-
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, request, render_template
 
 app = Flask(__name__)
 
 with open('raw_data.json') as f:
-    data = json.load(f)
+    exchange_rates_data = json.load(f)
 
 
-def calculate(value_one, value_two, amount):
+def exchange(value_one, value_two, amount):
+    """Calculate the amount by current rate. Return float"""
+
     return (value_two / value_one) * float(amount)
 
 
-@app.route("/", methods=['POST', 'GET'])
-def home():
-    """Simple html converter. Render result of conversion"""
+def get_requested_data(request_method=None):
+    """Collecting the requested data. Return JSON"""
 
-    if request.method == "POST":
-        currency = request.form.get("currency")
-        convert_currency = request.form.get("convert_currency")
-        try:
-            amount = request.form.get("amount")
-        except ValueError as e:
-            return e
+    base_currency = request_method.get("base_currency").upper()
+    to_currency = request_method.get("to_currency").upper()
 
-        currency = currency.upper()
-        convert_currency = convert_currency.upper()
-        currency_value = data["rates"][currency]
-        convert_currency_value = data["rates"][convert_currency]
-
-        new_amount = calculate(currency_value, convert_currency_value, amount)
-        new_amount = f"{new_amount:.2f}"
-
-        return render_template(['home.html'], value=new_amount)
-    return render_template(['home.html'])
-
-
-@app.route("/api")
-def get_all():
-    return jsonify(data['rates'])
-
-
-@app.route('/api/<string:currency_one><string:currency_two><int:amount>')
-def get_currency(currency_one, currency_two, amount):
-    # i - case insensitive
-    icurrency_one = currency_one.upper()
-    icurrency_two = currency_two.upper()
-    value_one = data['rates'][icurrency_one]
-    value_two = data['rates'][icurrency_two]
-
-    new_amount = calculate(value_one, value_two, amount)
-    context = {"currency_one": currency_one, "currency_two": currency_two, "amount": amount, "new_amount": new_amount}
-
-    return jsonify(context=context)
-
-
-@app.route('/api/convert')
-@Cache.cached(timeout=100000, key_prefix='all_components')
-def convert():
-    """Api endpoint returns the result as json"""
-
-    currency_one = request.args.get("currency_one")
-    currency_two = request.args.get("currency_two")
-    amount = request.args.get("amount")
+    amount = request_method.get("amount")
     try:
         amount = int(amount)
         assert amount > 0
@@ -71,27 +27,87 @@ def convert():
         return e
     except Exception as e:
         return e
-    #
-    # currency_one = currency_one.upper()
-    # currency_two = currency_two.upper()
 
-    value_one = data["rates"][currency_one]
-    value_two = data["rates"][currency_two]
+    base_currency_value = exchange_rates_data["rates"][base_currency]
+    to_currency_value = exchange_rates_data["rates"][to_currency]
 
-    new_value = calculate(value_one, value_two, amount)
-
-    context = {
-        "currency_one": currency_one,
-        "currency_two": currency_two,
-        "amount": new_value
+    return {
+        "base_currency": base_currency,
+        "to_currency": to_currency,
+        "base_currency_value": base_currency_value,
+        "to_currency_value": to_currency_value,
+        "amount": amount
     }
 
-    return jsonify(context)
+
+@app.route("/", methods=['POST', 'GET'])
+def home():
+    """Simple html form. Return JSON"""
+
+    if request.method == "POST":
+        (
+            base_currency,
+            to_currency,
+            base_currency_value,
+            to_currency_value,
+            amount_value
+        ) = get_requested_data(request_method=request.form).values()
+
+        converted_amount_value = f"{exchange(base_currency_value, to_currency_value, amount_value):.2f}"
+
+        return {
+            "base_currency": base_currency,
+            "to_currency": to_currency,
+            "amount_to_convert": f"{amount_value:.2f}",
+            "converted_amount": converted_amount_value
+        }
+
+    return render_template(['home.html'])
 
 
-@app.errorhandler(404)
-def page_not_found(e):
-    return render_template("404.html")
+@app.route('/api/convert')
+def convert():
+    """API endpoint converts two given currencies to current rates. Return JSON"""
+
+    (
+        base_currency,
+        to_currency,
+        base_currency_value,
+        to_currency_value,
+        amount_value
+    ) = get_requested_data(request_method=request.args).values()
+
+    converted_amount_value = f"{exchange(base_currency_value, to_currency_value, amount_value):.2f}"
+
+    return {
+        "base_currency": base_currency,
+        "to_currency": to_currency,
+        "amount_to_convert": f"{amount_value:.2f}",
+        "converted_amount": converted_amount_value
+    }
+
+
+@app.route("/api/all")
+def get_all_currencies_rates():
+    """API end point for all current currencies - rates. Return JSON"""
+
+    return exchange_rates_data['rates']
+
+
+@app.route('/convert/<string:base_currency><string:to_currency><int:amount>')
+def url_query_string_convert(base_currency, to_currency, amount):
+    """URL query string converter. Return JSON"""
+
+    base_currency_value = exchange_rates_data['rates'][base_currency.upper()]
+    to_currency_value = exchange_rates_data['rates'][to_currency.upper()]
+
+    converted_amount = exchange(base_currency_value, to_currency_value, amount)
+    return {
+        "base_currency": base_currency,
+        "to_currency": to_currency,
+        "amount": amount,
+        "converted_amount": converted_amount
+    }
 
 
 if __name__ == '__main__':
